@@ -1,0 +1,9 @@
+.env
+**/.env
+**/.venv
+**/__pycache__
+**/*.db
+**/*.log
+**/node_modules
+.git
+.omx

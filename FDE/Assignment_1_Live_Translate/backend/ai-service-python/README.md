@@ -8,7 +8,7 @@ Node gateway forwards requests here; the browser never talks to it directly.
 | File | What's there | Your job |
 |------|--------------|----------|
 | `app.py` | Endpoints wired, logging wired | The cache→LLM flow in `translate_one()` |
-| `lib/llm.py` | Prompt guidance + a Claude example | The LLM call itself |
+| `lib/llm.py` | Prompt guidance + OpenAI adapter | The LLM call itself |
 | `lib/cache.py` | Class + memory tier + stats | The SQLite tier (`init`/`get`/`set`) |
 | `lib/logger.py` | ✅ Done — structured JSON logs | Nothing (extend if you want) |
 

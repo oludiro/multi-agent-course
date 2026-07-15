@@ -16,18 +16,22 @@ TODOs so the widget lights up. Run:
 """
 import os
 import time
+import uuid
+from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from lib.cache import TwoTierCache
 from lib.llm import translate_text
 from lib.logger import get_logger
 
-load_dotenv()
+load_dotenv(Path(__file__).with_name(".env"))
 
-MODEL = os.getenv("MODEL", "claude-sonnet-4-6")
+MODEL = os.getenv("MODEL", "gpt-5.6-luna")
 DB_PATH = os.getenv("TRANSLATION_DB_PATH", "translations.db")
 
 app = FastAPI(title="FDE Live Translate — AI Service")
@@ -44,66 +48,104 @@ class BatchIn(BaseModel):
     target: str = "es-MX"
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    return JSONResponse(status_code=400, content={"error": "Invalid request", "detail": exc.errors()})
+
+
 @app.on_event("startup")
 async def startup():
     await cache.init()
     log.info("ai_service_started", extra={"model": MODEL, "db": DB_PATH})
 
 
+def request_id_from(request: Request) -> str:
+    return request.headers.get("x-request-id") or str(uuid.uuid4())
+
+
 # --- core: translate one string --------------------------------------------
-async def translate_one(text: str, target: str) -> dict:
+async def translate_one(text: str, target: str, request_id: str | None = None) -> dict:
     """Translate a single string, using the cache first.
 
     Returns a dict shaped exactly like the widget expects:
         {"translated": str, "cached": bool, "latencyMs": int, "model": str}
     """
-    text = (text or "").strip()
+    original_text = text or ""
+    text = original_text.strip()
     if not text:
-        return {"translated": "", "cached": False, "latencyMs": 0, "model": MODEL}
+        result = {"translated": "", "cached": False, "latencyMs": 0, "model": MODEL}
+        log.info(
+            "translate",
+            extra={"request_id": request_id, "cached": False, "latencyMs": 0, "chars": len(original_text)},
+        )
+        return result
 
     t0 = time.perf_counter()
+    cached_value = await cache.get(text, target)
+    if cached_value is not None:
+        latency = int((time.perf_counter() - t0) * 1000)
+        result = {"translated": cached_value, "cached": True, "latencyMs": latency, "model": MODEL}
+        log.info(
+            "translate",
+            extra={"request_id": request_id, "cached": True, "latencyMs": latency, "chars": len(text)},
+        )
+        return result
 
-    # -----------------------------------------------------------------------
-    # TODO (YOU) — the caching flow. This is the heart of the assignment.
-    #   1. Ask the cache for `text` (cache.get). If it's a HIT, use it and set
-    #      cached=True — do NOT call the LLM.
-    #   2. On a MISS, call the LLM (translate_text), then store the result
-    #      (cache.set) so the next identical request is a hit. cached=False.
-    #   3. Measure latencyMs from t0 in BOTH paths (a cache hit should be
-    #      dramatically faster — that's the point you're demonstrating).
-    #
-    # cached_value = await cache.get(text, target)
-    # if cached_value is not None:
-    #     ...
-    # else:
-    #     translated = await translate_text(text, target, model=MODEL)
-    #     await cache.set(text, target, translated, model=MODEL)
-    #     ...
-    # -----------------------------------------------------------------------
-    raise NotImplementedError("Implement the cache/LLM flow in translate_one()")
-
-
-@app.post("/translate")
-async def translate(body: TranslateIn):
-    result = await translate_one(body.text, body.target)
+    translated = await translate_text(text, target, model=MODEL)
+    await cache.set(text, target, translated, model=MODEL)
+    latency = int((time.perf_counter() - t0) * 1000)
+    result = {"translated": translated, "cached": False, "latencyMs": latency, "model": MODEL}
     log.info(
         "translate",
-        extra={"cached": result["cached"], "latencyMs": result["latencyMs"], "chars": len(body.text)},
+        extra={"request_id": request_id, "cached": False, "latencyMs": latency, "chars": len(text)},
     )
     return result
 
 
+@app.post("/translate")
+async def translate(body: TranslateIn, request: Request):
+    request_id = request_id_from(request)
+    try:
+        result = await translate_one(body.text, body.target, request_id=request_id)
+    except Exception as exc:
+        log.exception(
+            "translate_error",
+            extra={
+                "request_id": request_id,
+                "chars": len(body.text),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        raise HTTPException(status_code=502, detail="AI service error") from exc
+    return JSONResponse(content=result, headers={"x-request-id": request_id})
+
+
 @app.post("/translate/batch")
-async def translate_batch(body: BatchIn):
+async def translate_batch(body: BatchIn, request: Request):
+    request_id = request_id_from(request)
     t0 = time.perf_counter()
     results = []
-    for t in body.texts:
-        results.append(await translate_one(t, body.target))
+    try:
+        for t in body.texts:
+            results.append(await translate_one(t, body.target, request_id=request_id))
+    except Exception as exc:
+        log.exception(
+            "translate_batch_error",
+            extra={
+                "request_id": request_id,
+                "count": len(body.texts),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        raise HTTPException(status_code=502, detail="AI service error") from exc
     latency = int((time.perf_counter() - t0) * 1000)
     hits = sum(1 for r in results if r["cached"])
-    log.info("translate_batch", extra={"count": len(results), "hits": hits, "latencyMs": latency})
+    log.info("translate_batch", extra={"request_id": request_id, "count": len(results), "hits": hits, "latencyMs": latency})
     # widget expects {results: [{translated, cached}], latencyMs}
-    return {"results": [{"translated": r["translated"], "cached": r["cached"]} for r in results], "latencyMs": latency}
+    data = {"results": [{"translated": r["translated"], "cached": r["cached"]} for r in results], "latencyMs": latency}
+    return JSONResponse(content=data, headers={"x-request-id": request_id})
 
 
 @app.get("/health")
