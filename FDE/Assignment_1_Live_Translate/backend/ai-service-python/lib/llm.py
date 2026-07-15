@@ -3,9 +3,9 @@ lib/llm.py — the LLM translation call  (TODO: you implement)
 ============================================================
 One job: turn an English string into Mexican Spanish using an LLM.
 
-Provider is your choice. The default example below is Anthropic Claude
-(`pip install anthropic`, set ANTHROPIC_API_KEY). Hamza's launched version
-used Google Gemini — either is fine. Whatever you pick:
+This implementation uses the OpenAI API (`pip install openai`, set
+OPENAI_API_KEY). Keep the provider isolated here so the service can swap
+providers without changing the cache or API routes.
 
   - Write a PROMPT that pins the register to Mexican Spanish (es-MX), not
     generic/Castilian Spanish. Ask for ONLY the translation, no preamble.
@@ -19,31 +19,33 @@ assignment (and a real production bug — it ships English while looking healthy
 """
 import os
 
-MODEL_DEFAULT = os.getenv("MODEL", "claude-sonnet-4-6")
+from openai import AsyncOpenAI
+
+MODEL_DEFAULT = os.getenv("MODEL", "gpt-5.6-luna")
 
 
 async def translate_text(text: str, target: str = "es-MX", model: str = MODEL_DEFAULT) -> str:
     """Return `text` translated into `target` (Mexican Spanish by default)."""
-    # -----------------------------------------------------------------------
-    # TODO (YOU):
-    #   1. Build a system/user prompt that enforces Mexican Spanish and asks
-    #      for the translation only.
-    #   2. Call your LLM (async if the client supports it).
-    #   3. Clean and return the string.
-    #
-    # --- Example: Anthropic Claude -----------------------------------------
-    # from anthropic import AsyncAnthropic
-    # client = AsyncAnthropic()  # reads ANTHROPIC_API_KEY
-    # msg = await client.messages.create(
-    #     model=model,
-    #     max_tokens=1024,
-    #     system=(
-    #         "You are a professional translator. Translate the user's English text "
-    #         "into natural MEXICAN Spanish (es-MX). Return ONLY the translation — no "
-    #         "quotes, no notes. Keep numbers, prices, and product codes unchanged."
-    #     ),
-    #     messages=[{"role": "user", "content": text}],
-    # )
-    # return msg.content[0].text.strip()
-    # -----------------------------------------------------------------------
-    raise NotImplementedError("Implement translate_text() in lib/llm.py")
+    instructions = (
+        "You are a professional translator. Translate the user's English text "
+        "into natural Mexican Spanish (es-MX), using vocabulary and phrasing "
+        "that would read naturally in Mexico. Return ONLY the translation: no "
+        "preamble, no explanations, no markdown, and no wrapping quotes. "
+        "Preserve all numbers, prices with $, measurements, URLs, product names, "
+        "model codes, SKUs, and other alphanumeric identifiers exactly as written."
+    )
+    client = AsyncOpenAI()
+    response = await client.responses.create(
+        model=model,
+        instructions=instructions,
+        input=text,
+        max_output_tokens=1024,
+    )
+    translated = response.output_text.strip()
+    if (
+        len(translated) >= 2
+        and translated[0] == translated[-1]
+        and translated[0] in {'"', "'"}
+    ):
+        translated = translated[1:-1].strip()
+    return translated

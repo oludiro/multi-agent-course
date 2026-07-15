@@ -35,6 +35,13 @@
     window.FDE_CONFIG || {}
   );
 
+  // chrome.storage is asynchronous. content.js may populate FDE_CONFIG after
+  // this script has loaded, so resolve the URL when it is used instead of
+  // permanently retaining the localhost default from the initial snapshot.
+  function apiUrl() {
+    return (window.FDE_CONFIG && window.FDE_CONFIG.API_URL) || CONFIG.API_URL;
+  }
+
   // ---- state --------------------------------------------------------------
   let panelOpen = false;
   let busy = false;
@@ -153,7 +160,7 @@
       <div class="fde-badges" id="fde-badges"></div>
       <button class="fde-btn primary" id="fde-page" type="button">Translate page</button>
       <button class="fde-btn ghost" id="fde-restore" type="button">Restore page</button>
-      <div class="fde-status" id="fde-status">Backend: ${CONFIG.API_URL}</div>
+      <div class="fde-status" id="fde-status">Backend: ${apiUrl()}</div>
     </div>`;
 
   document.body.appendChild(fab);
@@ -234,7 +241,7 @@
 
   // ---- backend I/O --------------------------------------------------------
   async function postJSON(path, body) {
-    const res = await fetch(CONFIG.API_URL + path, {
+    const res = await fetch(apiUrl() + path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -281,7 +288,7 @@
     } else if (err.message && err.message.startsWith("HTTP")) {
       setStatus(`Backend error (${err.message}). Check your gateway/AI-service logs.`, true);
     } else {
-      setStatus(`Can't reach backend at ${CONFIG.API_URL}. Is your Node gateway running?`, true);
+      setStatus(`Can't reach backend at ${apiUrl()}. Is your Node gateway running?`, true);
     }
     console.error("[FDE]", err);
   }
@@ -298,5 +305,5 @@
   NotImplemented.prototype = Object.create(Error.prototype);
 
   console.log("%c[FDE] Live Translate widget loaded.", "color:#10b981;font-weight:bold");
-  console.log("[FDE] Backend:", CONFIG.API_URL, "· open the button bottom-right.");
+  console.log("[FDE] Backend:", apiUrl(), "· open the button bottom-right.");
 })();
