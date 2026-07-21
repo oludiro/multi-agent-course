@@ -83,7 +83,7 @@ def main():
     add("front_door", bool(ip), f"external endpoint: {ip or 'none'}")
 
     if ip:
-        body = json.dumps({"model": "Qwen/Qwen3-1.7B",
+        body = json.dumps({"model": "Qwen/Qwen2.5-VL-7B-Instruct",
                            "messages": [{"role": "user", "content": "Say ready."}],
                            "max_tokens": 8})
         code, out, err = sh(

@@ -1,44 +1,86 @@
-# Assignment 3: AI Infra on Kubernetes (the fleet shape)
+# Assignment 3: AI Infra on Kubernetes (RAG at scale for Moment Search)
 
 > In the earlier labs you rented one GPU and served a model with vLLM. This assignment is
-> what a Forward Deployed Engineer does after that demo: stand up a real Kubernetes
-> cluster, deploy that same engine as a fleet, and then break and fix the three
-> production assumptions that separate a demo from a deploy.
+> what a Forward Deployed Engineer does after that demo: take a working AI application,
+> replace its hosted LLM with an open-source model you serve yourself, and then run that
+> model as a real fleet on Kubernetes, with the break-and-fix experiments that separate
+> a demo from a deploy.
+
+The application is **[Moment Search](https://github.com/traversaal-ai/momentsearch)**:
+visual video search and RAG (CLIP retrieval + Qdrant + bring-your-own vision LLM). You
+will not modify its code. You will change three lines of its `.env`, which is the whole
+point: vLLM speaks the OpenAI API, so owning your model is a config change, not a
+rewrite.
 
 Companion session: **AI training, tuning, inference and RL on Kubernetes** (July 23,
-2026). The recap lives in [`SESSION_NOTES.md`](SESSION_NOTES.md); this assignment is
-the "inference fleet" section of that session, enacted on a cluster you own.
+2026). Recap in [`SESSION_NOTES.md`](SESSION_NOTES.md). The instructor demo runbook for
+this exact stack is in [`demo/`](demo/).
 
-Budget about 3 hours and under $10 of cloud spend. The $300 GCP free credit covers it
-many times over. **Teardown is graded.**
+One catch that matters: Moment Search shows the LLM actual video frames, so your model
+must be **vision-capable**. Text-only models will not work. We use
+`Qwen/Qwen2.5-VL-7B-Instruct` (Apache 2.0, fits one L4). Budget about 3 hours and under
+$10; the $300 GCP free credit covers it many times over. **Teardown is graded.**
 
-## Why GKE and not RunPod, Latitude, or Modal
+## The two rungs
 
-The learning objective is Kubernetes, not GPU access.
+- **Rung A (warm-up): one box on RunPod.** The same move you made in the vLLM lab, now
+  serving a vision model that a real application depends on. RunPod is perfect here and
+  requires no quota wait.
+- **Rung B (graded core): the fleet on GKE.** The learning objective of this rung is
+  Kubernetes itself: kubectl, node pools, probes, rollouts, autoscaling and cost
+  hygiene, on the platform enterprise customers actually run. RunPod and Modal are
+  great products that hide the Kubernetes API; that is exactly why they cannot carry
+  this rung.
 
-- **GKE** gives you real `kubectl`, node pools, taints, probes, rollouts and an
-  autoscaler, and it installs NVIDIA drivers for you. This is what enterprise customers
-  actually run.
-- **RunPod / Latitude.sh** were perfect for the one-box vLLM lab. RunPod never hands you
-  a Kubernetes API; Latitude gives you bare metal where you would install k3s and the
-  GPU stack yourself before the lesson starts.
-- **Modal** is a great product whose whole pitch is hiding Kubernetes from you. Using it
-  here teaches the opposite lesson.
-
-Already have AWS credits? EKS with a g5/g6 node group works; the manifests are
-identical, the cluster setup is on you.
+Already have AWS credits? EKS with a g5/g6 node group works; manifests are identical.
 
 ## Part 0: Accounts and quota (start early, this has a wait)
 
 1. Install `gcloud`, create a project, enable the Kubernetes Engine API.
-2. Upgrade the account from free trial to paid billing. Your $300 credit survives; GPU
-   quota does not exist on trial accounts.
-3. Request quota: IAM & Admin, Quotas, filter "NVIDIA L4 GPUs" (or T4), region
-   `us-central1`, request 1 or 2. Approval usually takes minutes to hours.
-4. This step is part of the assignment. Quota tickets are real FDE work; record how long
-   yours took.
+2. Upgrade from free trial to paid billing. The $300 credit survives; GPU quota does
+   not exist on trial accounts.
+3. Request quota: IAM & Admin, Quotas, "NVIDIA L4 GPUs", region `us-central1`, request
+   2. Approval usually takes minutes to hours.
+4. This step is part of the assignment. Quota tickets are real FDE work; record how
+   long yours took.
 
-## Part 1: Create the cluster (about 10 minutes)
+## Part 1: Meet the app (15 minutes, no GPU needed)
+
+```bash
+git clone https://github.com/traversaal-ai/momentsearch.git
+cd momentsearch
+cp .env.example .env
+docker compose up --build
+python examples/quickstart.py     # seeds the sample corpus
+```
+
+Open http://localhost:8000. Retrieval works with no LLM key at all (CLIP runs
+locally). Ask a question and note what is missing: the cited answer. That missing
+piece is what you are about to own.
+
+## Part 2, Rung A: one box on RunPod (warm-up)
+
+Rent a single 24 GB+ GPU on RunPod and serve the vision model with vLLM, the same way
+you did in the earlier lab:
+
+```bash
+vllm serve Qwen/Qwen2.5-VL-7B-Instruct --max-model-len 8192 --limit-mm-per-prompt image=8
+```
+
+Point Moment Search at it in `.env` and restart the app:
+
+```
+LLM_PROVIDER=openai
+LLM_BASE_URL=http://<runpod-ip>:8000/v1
+LLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+LLM_API_KEY=not-needed
+```
+
+Ask the same question again. Same app, your model, cited answers. Screenshot it, then
+shut the pod down. That is the whole rung; everything after this is about what happens
+when one box is not enough.
+
+## Part 3, Rung B: create the cluster (about 10 minutes)
 
 ```bash
 gcloud container clusters create fde-lab \
@@ -48,70 +90,82 @@ gcloud container node-pools create gpu-pool \
   --cluster fde-lab --zone us-central1-a \
   --machine-type g2-standard-8 \
   --accelerator type=nvidia-l4,count=1,gpu-driver-version=latest \
-  --num-nodes 2 --spot
+  --num-nodes 2 --enable-autoscaling --min-nodes 1 --max-nodes 3 --spot
 ```
 
-T4 variant if L4 quota is slow: `--machine-type n1-standard-4 --accelerator
-type=nvidia-tesla-t4,count=1,gpu-driver-version=latest`.
+The autoscaling flags matter: experiment B below only works if the cluster is allowed
+to buy a third node. Check the five words from the session: `kubectl get nodes` shows
+your node pools; `kubectl describe node <gpu-node>` shows `nvidia.com/gpu: 1` and the
+taint that keeps ordinary pods off expensive hardware.
 
-Check the five words from the session: `kubectl get nodes` shows your node pools;
-`kubectl describe node <gpu-node>` shows `nvidia.com/gpu: 1` and the taint that keeps
-ordinary pods off expensive hardware.
+## Part 4: Deploy the fleet and rewire the app
 
-## Part 2: Deploy the fleet
-
-Apply the provided scaffolding and watch it come up:
+Read [`manifests/vllm.yaml`](manifests/vllm.yaml) top to bottom, then:
 
 ```bash
 kubectl apply -f manifests/vllm.yaml
 kubectl get pods -w
 ```
 
-Read [`manifests/vllm.yaml`](manifests/vllm.yaml) top to bottom before applying it.
 Every field exists for a reason covered in the session: one pod per GPU, a readiness
-probe that gates on `/health` (model in memory, not port open), a rollout strategy that
-never drops below full capacity, and a toleration for the GPU taint.
+probe that gates on `/health` (model in memory, not port open), a rollout strategy
+that never dips below full capacity, and a toleration for the GPU taint. Record the
+gap between `Running` and `Ready`; that gap is the weights loading into VRAM.
 
-Record the gap between `Running` and `Ready`. That gap is the model loading into VRAM.
-Then curl the LoadBalancer IP with an OpenAI-style chat request until tokens stream
-back.
+Get the front door and point the app at the fleet:
 
-## Part 3: Break it three ways (the graded core)
+```bash
+kubectl get svc vllm    # note EXTERNAL-IP
+```
 
-**A. The lying probe.** Change the readiness probe to a plain TCP check on port 8000 and
-redeploy. Curl the service repeatedly during startup and capture the failures that now
+```
+LLM_BASE_URL=http://<EXTERNAL-IP>/v1
+```
+
+Restart Moment Search and ask again. The answer now comes from a two-replica fleet
+behind a LoadBalancer. Nothing in the app changed.
+
+## Part 5: Break it three ways (the graded core)
+
+Run every experiment with the app open. Infrastructure failures are only real when you
+watch them through a product.
+
+**A. The lying probe.** Change the readiness probe to a plain TCP check on port 8000
+and redeploy. Ask questions in the app during startup and capture the failures that
 leak through. Revert. One paragraph: why did "port open" lie?
 
 **B. Capacity is bought, not borrowed.** `kubectl scale deployment vllm --replicas=3`.
-The pod goes `Pending`; the cluster buys a Spot node, installs drivers, pulls the image,
-loads weights. Time the whole chain from scale command to `Ready`. That number is why
-fleets keep a warm floor.
+The pod goes `Pending`; the cluster buys a Spot node, installs drivers, pulls the
+image, loads weights. Time the whole chain from scale command to `Ready`. That number
+is why fleets keep a warm floor.
 
-**C. The rollout that drops nobody.** With `maxUnavailable: 0, maxSurge: 1` in place
-(already set in the scaffolding), start a long streaming completion in one terminal and
-run `kubectl rollout restart deployment vllm` in another. Confirm the stream finishes.
-Explain what would have happened without those two settings.
+**C. The rollout that drops nobody.** With `maxUnavailable: 0, maxSurge: 1` already in
+the scaffolding, ask the app a question and run `kubectl rollout restart deployment
+vllm` while the answer streams. Confirm it finishes. Then delete one pod outright and
+ask again: the readiness gate keeps traffic on the healthy replica while the dead one
+resurrects. Explain both behaviors.
 
-## Part 4: Stretch goals (pick one)
+## Stretch goals (pick one)
 
-- **Tensor parallel:** recreate the GPU pool with `g2-standard-24` and `count=2`, serve
-  a 7B class model with `--tensor-parallel-size 2`.
-- **The queue shape:** install Kueue, set a quota of 1 GPU, submit three fine-tune style
-  Jobs, watch them admit one at a time.
+- **Tensor parallel:** recreate the GPU pool with `g2-standard-24` and `count=2`,
+  serve the model with `--tensor-parallel-size 2`.
+- **The queue shape:** install Kueue, set a quota of 1 GPU, submit three fine-tune
+  style Jobs, watch them admit one at a time.
 - **Smart traffic:** install the Gateway API Inference Extension and route by model
   name.
 
 ## Deliverables
 
-1. Run the eval: `python eval/eval.py` against your live cluster. It writes
+1. Run `python eval/eval.py` against the live cluster before teardown; it writes
    `eval/REPORT.md`.
-2. A one-page writeup: your three timings (Ready gap, scale-up chain, rollout), total
-   spend from the billing page, and the one thing that surprised you.
-3. A 60 to 90 second screen recording: `kubectl get pods -w` during the scale-up, and a
-   streamed completion answered from the LoadBalancer IP.
+2. A one-page writeup: your three timings (Ready gap, scale-up chain, rollout), Rung A
+   vs Rung B observations, actual spend from the billing page, and the one thing that
+   surprised you.
+3. A 60 to 90 second recording: Moment Search answering through your fleet, then
+   `kubectl get pods -w` during the scale-up.
 4. A screenshot of the empty billing page after teardown.
 
-The rubric is in [`eval/rubric.json`](eval/rubric.json). Non-negotiables are in
+Rubric: [`eval/rubric.json`](eval/rubric.json). Non-negotiables:
 [`AGENTS.md`](AGENTS.md).
 
 ## Teardown (graded, not optional)
@@ -125,6 +179,7 @@ overnight is also an FDE lesson, just an expensive one.
 
 ## If quota is stuck
 
-Do every Kubernetes step on a local kind cluster with a CPU model (ollama or vLLM CPU
-mode with a 0.5B model). The mechanics of probes, scaling and rollouts are identical.
-Swap in the GPU pool when the quota lands, then rerun the eval.
+Do Rung A on RunPod (no quota needed), and every Kubernetes step on a local kind
+cluster with a CPU model (ollama with `qwen2.5-vl` or vLLM CPU mode). Probes, scaling
+and rollouts behave identically. Swap in the GPU pool when quota lands, then rerun the
+eval.
