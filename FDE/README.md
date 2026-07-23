@@ -67,11 +67,9 @@ Real-world products, all built end to end — from efficiency to action.
 | 2 | [Voice Agent](Assignment_2_voice_agent/) | A production voice agent (STT → LLM → TTS) with a knowledge router, evals, and telemetry | Real-time pipelines, turn-taking, latency budgeting, retrieval, evaluation |
 | 3 | [Moment Search at Scale](Assignment_3_Moment_Search_Scaled/) | Extend the working [Moment Search](https://github.com/traversaal-ai/momentsearch) video-RAG app to ingest **research papers and slide decks** through an **async work queue**, and answer one question with cited moments across video + page + slide | Async ingestion & work queues (Prefect), multi-format parsing, crash-safe pipelines, one shared vector index, cross-source cited retrieval, deploy on Fly.io |
 | 4 | [Moment Search](Assignment_4_Moment_Search/) | A multimodal, agentic RAG engine plus a Kafka-backed ingestion pipeline that finds the exact moment across text, image, audio, and video | Multimodal embeddings, agentic retrieval, cross-modal re-rank, Kafka, sublinear scale |
-| 5 | [AI Infra on Kubernetes](Assignment_5_AI_Infra_K8s/) | Rewire a RAG app onto your own open-source vision LLM: one box on RunPod, then a two-replica vLLM fleet on GKE behind a LoadBalancer, with break-and-fix experiments and a graded teardown | Kubernetes (pods, node pools, probes, rollouts), GPU scheduling, vLLM serving, OpenAI-compatible model swaps, capacity and cost hygiene |
 
-> **This week:** Assignment 3 (Scale a Digital Twin). Assignment 5 (AI Infra on
-> Kubernetes) pairs with the **guest-speaker session on AI training, tuning, inference
-> and RL on Kubernetes** — running next week.
+> **This week:** Assignment 3 (Moment Search at Scale). A hands-on **AI Infra on
+> Kubernetes** assignment pairs with an upcoming guest-speaker session — details soon.
 
 Each assignment folder is self-contained with its own `README.md`, provided scaffolding,
 an `AGENTS.md` of non-negotiables, and a grading rubric.
