@@ -1,4 +1,4 @@
-# Assignment 3: AI Infra on Kubernetes (RAG at scale for Moment Search)
+# Assignment 5: AI Infra on Kubernetes (RAG at scale for Moment Search)
 
 > So far you have used LLMs the way most of the world does: through a hosted
 > OpenAI-style API. This assignment is where you cross to the other side of that URL.
