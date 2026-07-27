@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aurora Voice Agent: Interactive Tour</title>
+    <style>
+      :root { --ink:#edf6ff; --muted:#9bb1c9; --page:#07111f; --panel:#0f2034; --panel-2:#132a44; --line:#284660; --aqua:#62e1cf; --gold:#ffcc72; --violet:#a99cff; --danger:#ff8f99; }
+      * { box-sizing:border-box; } html { scroll-behavior:smooth; } body { margin:0; min-width:320px; color:var(--ink); background:radial-gradient(circle at 80% -10%,#1d4a68 0,transparent 31rem),var(--page); font:16px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+      button,a { font:inherit; } button { cursor:pointer; } button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid var(--gold); outline-offset:3px; }
+      .wrap { width:min(1120px,calc(100% - 32px)); margin:auto; } .hero { padding:64px 0 36px; } .eyebrow { color:var(--aqua); font-weight:800; text-transform:uppercase; letter-spacing:.12em; font-size:.76rem; } h1 { margin:8px 0 14px; max-width:780px; font-size:clamp(2.4rem,6vw,5rem); line-height:.98; letter-spacing:-.06em; } h2 { font-size:clamp(1.5rem,3vw,2.2rem); letter-spacing:-.04em; } .lede { max-width:700px; color:var(--muted); font-size:1.1rem; }
+      .nav { display:flex; flex-wrap:wrap; gap:10px; margin:22px 0 0; } .nav a,.pill { padding:9px 13px; border:1px solid var(--line); border-radius:999px; color:var(--ink); text-decoration:none; background:#0c1a2a; font-weight:700; font-size:.9rem; } .nav a:hover { background:var(--panel-2); }
+      .lesson { margin:24px 0; padding:clamp(20px,4vw,40px); border:1px solid var(--line); border-radius:24px; background:linear-gradient(150deg,#10243a,#0b1929); box-shadow:0 18px 50px #0005; } .lesson > p { color:var(--muted); max-width:760px; }
+      .scenario-row { display:flex; flex-wrap:wrap; gap:9px; margin:22px 0 18px; } .scenario { border:1px solid #3d607e; padding:10px 13px; color:var(--ink); background:#10263b; border-radius:10px; text-align:left; } .scenario:hover,.scenario.selected { background:#16445a; border-color:var(--aqua); } .scenario small { display:block; color:var(--muted); margin-top:2px; }
+      .control { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:16px; border-radius:14px; background:#081522; } .primary { border:0; padding:12px 16px; border-radius:10px; background:var(--aqua); color:#052018; font-weight:850; } .primary:hover { filter:brightness(1.08); } input[type=range] { accent-color:var(--aqua); } #speed-output { color:var(--gold); font-weight:800; }
+      .conversation { margin:22px 0; padding:16px; min-height:105px; border:1px solid var(--line); border-radius:16px; background:#071522; } .speech { display:inline-block; max-width:590px; padding:12px 14px; border-radius:4px 15px 15px 15px; background:#203b56; } .speech strong { display:block; margin-bottom:3px; color:var(--aqua); font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; }
+      .stages { display:grid; grid-template-columns:repeat(5,minmax(120px,1fr)); gap:10px; } .stage { position:relative; min-height:136px; padding:15px; border:1px solid var(--line); border-radius:14px; background:#0b1b2c; overflow:hidden; } .stage::before { content:""; position:absolute; inset:0 auto 0 0; width:4px; background:#38546f; } .stage.active { border-color:var(--aqua); background:#12334a; transform:translateY(-4px); } .stage.active::before { background:var(--aqua); } .stage.done::before { background:var(--violet); } .stage strong { display:block; font-size:1.02rem; } .stage p { margin:6px 0 0; color:var(--muted); font-size:.84rem; } .stage code { color:var(--gold); font-size:.78rem; }
+      .readout { min-height:64px; margin-top:13px; padding:13px; border-left:4px solid var(--gold); background:#17191e; color:#d6e3ef; } .readout b { color:var(--gold); }
+      .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; } .card { display:flex; flex-direction:column; min-height:230px; padding:22px; border:1px solid var(--line); border-radius:18px; background:var(--panel); text-decoration:none; color:var(--ink); transition:transform .18s ease,background .18s ease; } .card:hover { transform:translateY(-4px); background:var(--panel-2); } .card .number { color:var(--aqua); font-weight:850; } .card p { color:var(--muted); } .card span:last-child { margin-top:auto; color:var(--gold); font-weight:800; }
+      .callout { display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:start; margin-top:20px; padding:18px; border-radius:14px; background:#162b40; } .callout b { color:var(--aqua); } footer { padding:18px 0 40px; color:var(--muted); font-size:.9rem; }
+      @media (max-width:780px) { .stages { grid-template-columns:repeat(2,1fr); } .grid { grid-template-columns:1fr; } } @media (max-width:480px) { .wrap { width:min(100% - 20px,1120px); } .hero { padding-top:36px; } .stages { grid-template-columns:1fr; } }
+      @media (prefers-reduced-motion:reduce) { *,html { scroll-behavior:auto!important; transition:none!important; } }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <span class="eyebrow">A hands-on tour of Assignment 2</span>
+        <h1>Follow one hotel call through the whole system.</h1>
+        <p class="lede">Aurora is a narrow hotel-reservations voice agent. These tiny labs make the architecture tangible: choose a caller request, watch the work travel through the pipeline, then explore the rules that keep it safe.</p>
+        <nav class="nav" aria-label="Learning pages"><a href="#tour">Start the animated tour</a><a href="booking-lab.html">Booking decision lab</a><a href="operations-lab.html">Voice &amp; provider lab</a><a href="../agents-guide.html">Contributor guide</a></nav>
+      </header>
+
+      <section class="lesson" id="tour" aria-labelledby="tour-title">
+        <span class="eyebrow">Lesson 1 · the cascaded loop</span>
+        <h2 id="tour-title">Make a call and watch the pieces cooperate.</h2>
+        <p>The production-shaped learning loop is deliberately separate: caller speech → STT → agent plus tools → TTS → spoken reply. The mock provider lets the same boundaries run offline.</p>
+        <div class="scenario-row" aria-label="Choose a caller request">
+          <button class="scenario selected" data-key="booking"><b>Book a stay</b><small>Needs trusted room data</small></button>
+          <button class="scenario" data-key="offtopic"><b>Ask the weather</b><small>Tests reservation-only scope</small></button>
+          <button class="scenario" data-key="human"><b>Ask for a person</b><small>Tests transfer control</small></button>
+          <button class="scenario" data-key="goodbye"><b>Say goodbye</b><small>Tests a clean hangup</small></button>
+        </div>
+        <div class="control"><button class="primary" id="run">Walk this call through the system</button><label>Animation pace <input id="pace" type="range" min="350" max="1400" value="750" step="50" /> <output id="speed-output">normal</output></label></div>
+        <div class="conversation" aria-live="polite"><div class="speech"><strong>Caller</strong><span id="caller-text">“I need a room from August 12 to August 14 for two guests.”</span></div></div>
+        <div class="stages" aria-label="Call stages">
+          <article class="stage" data-stage="0"><strong>1. Capture</strong><p>Mic mode records 16 kHz PCM until a caller pause.</p><code>voice_loop.py</code></article>
+          <article class="stage" data-stage="1"><strong>2. STT</strong><p>Speech becomes a transcript the system can inspect.</p><code>provider.transcribe()</code></article>
+          <article class="stage" data-stage="2"><strong>3. Agent</strong><p>Rules decide whether to answer, call a tool, transfer, or end.</p><code>agent.respond()</code></article>
+          <article class="stage" data-stage="3"><strong>4. Tool loop</strong><p>Trusted operational data returns to the agent before it speaks.</p><code>run_tool()</code></article>
+          <article class="stage" data-stage="4"><strong>5. TTS / control</strong><p>The agent speaks; transfer or hangup can stop the loop.</p><code>provider.synthesize()</code></article>
+        </div>
+        <div class="readout" id="readout"><b>Ready:</b> Pick a caller request, then run the walk-through.</div>
+        <div class="callout"><b>Why cascade?</b><span>Each stage is measurable, easy to replace, and easy to rehearse. The terminal reports STT, LLM/tool, and TTS timings separately instead of hiding them inside a black box.</span></div>
+      </section>
+
+      <section aria-labelledby="next-title">
+        <span class="eyebrow">Choose your next mini-lab</span>
+        <h2 id="next-title">Learn the “why,” not only the file names.</h2>
+        <div class="grid">
+          <a class="card" href="booking-lab.html"><span class="number">Lesson 2</span><h3>Booking decision lab</h3><p>Drive the booking flow one decision at a time. See why availability, contact details, and confirmation have to happen in order.</p><span>Open the lab →</span></a>
+          <a class="card" href="operations-lab.html"><span class="number">Lesson 3</span><h3>Voice &amp; provider lab</h3><p>Adjust endpointing and compare mock, OpenAI, and Groq without confusing local demos for production telephony.</p><span>Open the lab →</span></a>
+          <a class="card" href="../agents-guide.html"><span class="number">Reference</span><h3>Contributor guide</h3><p>Use the original interactive guide for repository ownership, offline commands, test expectations, and contribution safety.</p><span>Open the guide →</span></a>
+        </div>
+      </section>
+    </main>
+    <footer class="wrap">Grounded in <code>pipeline/voice_loop.py</code>, <code>pipeline/agent.py</code>, <code>pipeline/providers.py</code>, and <code>pipeline/smoke_test.py</code>. All interactions are local teaching simulations; they do not make bookings or call providers.</footer>
+    <script>
+      const scenarios = {
+        booking: { caller: '“I need a room from August 12 to August 14 for two guests.”', agent: 'The agent has dates and guest count, so the prompt requires an availability check now.', tool: 'check_availability → Standard Queen at $189/night (and other matching rooms)', finish: 'Aurora can now offer only tool-returned room options and ask which one the caller wants.' },
+        offtopic: { caller: '“Can you tell me the weather?”', agent: 'This is outside hotel booking support. The agent must not become a general assistant.', tool: 'No reservation tool is needed.', finish: 'Aurora politely redirects: “I can only help with hotel reservations. Are you looking to book, change, or cancel a stay?”' },
+        human: { caller: '“Can I speak to a person?”', agent: 'A caller explicitly requested human help, so this must be handed off.', tool: 'transfer_to_human → action: transfer', finish: 'The voice loop sees transfer and ends with a simulated SIP REFER to the front desk.' },
+        goodbye: { caller: '“Goodbye.”', agent: 'The conversation is clearly over.', tool: 'end_call → action: hangup', finish: 'The voice loop sees hangup and ends with a simulated SIP BYE.' }
+      };
+      let selected = 'booking'; let busy = false;
+      const stageEls = [...document.querySelectorAll('.stage')]; const readout = document.querySelector('#readout');
+      const delay = () => Number(document.querySelector('#pace').value);
+      function say(text) { readout.innerHTML = text; }
+      function reset() { stageEls.forEach(el => el.className = 'stage'); }
+      document.querySelectorAll('.scenario').forEach(button => button.addEventListener('click', () => { if (busy) return; selected = button.dataset.key; document.querySelectorAll('.scenario').forEach(item => item.classList.toggle('selected', item === button)); document.querySelector('#caller-text').textContent = scenarios[selected].caller; reset(); say('<b>New request selected:</b> Press the button to trace it.'); }));
+      document.querySelector('#pace').addEventListener('input', event => { document.querySelector('#speed-output').textContent = Number(event.target.value) < 650 ? 'fast' : Number(event.target.value) > 1050 ? 'slow' : 'normal'; });
+      document.querySelector('#run').addEventListener('click', async () => {
+        if (busy) return; busy = true; const data = scenarios[selected]; reset();
+        const steps = [ '<b>Capture:</b> In microphone mode, WebRTC VAD waits for speech and then a pause. In <code>--text</code> mode, this stage is typed input.', '<b>STT:</b> A provider converts PCM to text. The mock path supplies deterministic transcripts so no network or key is required.', `<b>Agent:</b> ${data.agent}`, `<b>Tool loop:</b> ${data.tool}`, `<b>Reply / control:</b> ${data.finish}` ];
+        for (let i = 0; i < steps.length; i += 1) { stageEls[i].classList.add('active'); say(steps[i]); await new Promise(resolve => setTimeout(resolve, delay())); stageEls[i].classList.remove('active'); stageEls[i].classList.add('done'); }
+        say('<b>Trace complete:</b> Try a different caller request to see the same architecture reach a different safe outcome.'); busy = false;
+      });
+    </script>
+  </body>
+</html>
