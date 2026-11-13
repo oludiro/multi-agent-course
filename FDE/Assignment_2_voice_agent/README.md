@@ -14,7 +14,7 @@ caller audio -> VAD and endpointing -> STT -> AgentRouter -> LLM -> RAG and tool
 - Hotel-only conversational guardrails
 - Local policy RAG using SQLite FTS5
 - English and Spanish session routing
-- Mock, OpenAI, and Groq provider modes
+- Mock, OpenAI, Groq, and local Ollama provider modes
 - Local microphone capture with WebRTC VAD
 - Browser VAD with adaptive noise calibration and playback barge-in
 - Per-turn structured telemetry and a browser trace timeline
@@ -123,6 +123,30 @@ TTS_BACKEND=system
 ```
 
 The commands remain the same.
+
+## Ollama Setup
+
+Ollama can run the reservation agent's LLM locally with no API key. The local
+default is `gemma4`; set `LLM_MODEL` if your installed Ollama model has another
+name.
+
+```env
+PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434/v1
+TTS_BACKEND=system
+```
+
+Confirm the local model is available, then use typed mode:
+
+```bash
+ollama list
+python voice_loop.py --text
+```
+
+Ollama supplies chat and tool calling, not speech-to-text in this workshop.
+Use typed mode for a fully local interaction. The LiveKit UI can use its typed
+conversation panel and browser speech output, but microphone turns need an STT
+provider.
 
 ## Local LiveKit Demo
 

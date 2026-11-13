@@ -1,9 +1,9 @@
 """
-providers.py  -  one adaptor, two backends: Groq and OpenAI.
+providers.py  -  one adaptor for Groq, OpenAI, and local Ollama.
 
 Groq speaks the OpenAI API dialect, so a single code path covers both  -  only
-base_url, api_key, and model names differ. Switch with PROVIDER=groq|openai in
-.env; move to your OpenAI key later by flipping that one value.
+base_url, API key requirements, and model names differ. Switch with
+PROVIDER=groq|openai|ollama in .env.
 
 Exposes three stages the voice loop needs:
     chat(messages, tools)        -> LLM turn (OpenAI-style tool calling)
@@ -41,6 +41,18 @@ PRESETS = {
         "tts_model": "tts-1",
         "tts_voice": "alloy",
     },
+    "ollama": {
+        # Ollama exposes an OpenAI-compatible chat-completions endpoint locally.
+        "base_url": "http://localhost:11434/v1",
+        # The OpenAI SDK requires a non-empty value even though Ollama ignores it.
+        "api_key": "ollama",
+        "llm_model": "gemma4",
+        # Ollama supplies the local LLM only; use typed input or an external STT.
+        "stt_model": "not-supported",
+        "tts_model": "browser",
+        "tts_voice": "system",
+        "local_tts_only": True,
+    },
 }
 
 DEFAULT_STT_PROMPT = (
@@ -74,11 +86,15 @@ class Provider:
         self.name = name
         p = PRESETS[name]
 
-        api_key = os.getenv(p["api_key_env"])
-        if not api_key:
-            raise RuntimeError(f"Set {p['api_key_env']} in your .env (PROVIDER={name})")
+        api_key_env = p.get("api_key_env")
+        api_key = os.getenv(api_key_env) if api_key_env else p.get("api_key")
+        if api_key_env and not api_key:
+            raise RuntimeError(f"Set {api_key_env} in your .env (PROVIDER={name})")
         from openai import OpenAI  # lazy: the mock path needs no SDK installed
-        self.client = OpenAI(api_key=api_key, base_url=p["base_url"])
+        base_url = p["base_url"]
+        if name == "ollama":
+            base_url = _env_or_default("OLLAMA_BASE_URL", base_url)
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
 
         # Per-stage overrides fall back to the preset.
         self.llm_model = _env_or_default("LLM_MODEL", p["llm_model"])
@@ -88,7 +104,10 @@ class Provider:
         self.tts_voice = _env_or_default("TTS_VOICE", p["tts_voice"])
         self.tts_instructions = os.getenv("TTS_INSTRUCTIONS")
         # "provider" = cloud TTS; "system" = local system voice command.
-        self.tts_backend = os.getenv("TTS_BACKEND", "provider").lower()
+        self.supports_stt = not p.get("local_tts_only", False)
+        self.tts_backend = "system" if p.get("local_tts_only") else os.getenv(
+            "TTS_BACKEND", "provider"
+        ).lower()
 
     # --- LLM ---
     def chat(
@@ -109,6 +128,10 @@ class Provider:
     # --- STT ---
     def transcribe(self, pcm_int16: bytes, sample_rate: int = 16000) -> str:
         """Transcribe raw 16-bit mono PCM via Whisper."""
+        if not self.supports_stt:
+            raise RuntimeError(
+                "Ollama provides the local LLM only; use --text or configure an STT provider."
+            )
         wav = _pcm_to_wav(pcm_int16, sample_rate)
         wav.name = "turn.wav"  # SDK infers format from the filename
         transcription_args = {

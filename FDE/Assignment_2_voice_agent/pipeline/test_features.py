@@ -11,7 +11,7 @@ os.environ.setdefault("TTS_BACKEND", "print")
 
 from agent import Agent, explicit_language_request, required_tool_for
 from knowledge import search_hotel_knowledge
-from providers import MockProvider, _env_or_default, _mk_tool, make_provider
+from providers import MockProvider, Provider, _env_or_default, _mk_tool, make_provider
 from router import AgentRouter
 from scale_check import estimate_capacity
 from telemetry import TurnTrace
@@ -79,6 +79,16 @@ class ProviderConfigurationTests(unittest.TestCase):
     def test_explicit_model_override_is_preserved(self):
         with patch.dict(os.environ, {"LLM_MODEL": "gpt-4.1-mini"}):
             self.assertEqual(_env_or_default("LLM_MODEL", "gpt-4o-mini"), "gpt-4.1-mini")
+
+    def test_ollama_uses_local_chat_endpoint_without_an_api_key(self):
+        with patch.dict(os.environ, {"OLLAMA_BASE_URL": "", "LLM_MODEL": ""}):
+            provider = Provider("ollama")
+
+        self.assertEqual(provider.name, "ollama")
+        self.assertEqual(provider.llm_model, "gemma4")
+        self.assertEqual(str(provider.client.base_url), "http://localhost:11434/v1/")
+        self.assertFalse(provider.supports_stt)
+        self.assertEqual(provider.tts_backend, "system")
 
 
 class RetrievalTests(unittest.TestCase):

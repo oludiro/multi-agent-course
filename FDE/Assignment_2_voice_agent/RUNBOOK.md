@@ -44,6 +44,18 @@ changing this setting.
 
 Use `PROVIDER=mock` in commands when no key is available.
 
+For a local Ollama LLM with no API key, use:
+
+```env
+PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434/v1
+TTS_BACKEND=system
+```
+
+The default Ollama model is `gemma4`; set `LLM_MODEL` to use a different local
+model. This workshop integration supports the local model in text mode. Browser
+and microphone turns still need a speech-to-text provider.
+
 Before the session, confirm the offline checks pass:
 
 ```bash

@@ -58,7 +58,7 @@ Override these values in `livekit/.env` when using another server. The scripts a
 
 ## Provider Behavior
 
-`PROVIDER=openai` or `PROVIDER=groq` transcribes the recorded browser turn and runs the live hotel agent. `PROVIDER=mock` uses scripted transcripts, deterministic tools, and no paid calls.
+`PROVIDER=openai` or `PROVIDER=groq` transcribes the recorded browser turn and runs the live hotel agent. `PROVIDER=ollama` runs the LLM locally using its OpenAI-compatible endpoint and supports the typed conversation panel; microphone turns still need an STT provider. `PROVIDER=mock` uses scripted transcripts, deterministic tools, and no paid calls.
 
 `TTS_BACKEND=provider` generates WAV audio through the selected provider using `TTS_MODEL` and `TTS_VOICE`. `TTS_BACKEND=system` uses browser speech synthesis in the LiveKit UI and avoids provider TTS cost. The browser falls back to its installed voice if provider synthesis or playback fails.
 

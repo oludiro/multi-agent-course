@@ -15,7 +15,10 @@ pip install -r requirements.txt
 cp config.example.env .env
 ```
 
-Select `PROVIDER=mock`, `PROVIDER=openai`, or `PROVIDER=groq` in `.env`. Only a live provider requires an API key.
+Select `PROVIDER=mock`, `PROVIDER=openai`, `PROVIDER=groq`, or `PROVIDER=ollama`
+in `.env`. Ollama uses the local OpenAI-compatible endpoint at
+`http://localhost:11434/v1`, defaults to `gemma4`, and needs no API key. It
+supports text mode; microphone mode still needs an STT provider.
 
 ## Verify Offline
 
@@ -54,7 +57,7 @@ python scale_check.py --dau 1000000
 | File | Responsibility |
 |------|----------------|
 | `agent.py` | Prompt, tools, RAG tool, routing integration, and conversation state |
-| `providers.py` | Mock, OpenAI, and Groq adapters |
+| `providers.py` | Mock, OpenAI, Groq, and Ollama adapters |
 | `router.py` | English and Spanish session routing |
 | `knowledge.py` | Local SQLite FTS5 retrieval with bilingual query expansion |
 | `telemetry.py` | Structured turn events, timings, and optional JSONL output |
